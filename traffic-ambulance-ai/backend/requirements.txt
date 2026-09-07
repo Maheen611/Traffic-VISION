@@ -1,0 +1,25 @@
+# Compiled from actual `import`s in app/ — detector.py's docstring already
+# referenced "requirements.txt" as if this existed; it didn't. This is what
+# `uvicorn app.main:app` and the video pipeline actually need at runtime.
+
+fastapi
+uvicorn[standard]
+python-multipart          # required by FastAPI for UploadFile / form-data (POST /videos/upload)
+pydantic
+
+sqlalchemy
+psycopg2-binary            # DATABASE_URL in config.py defaults to postgresql+psycopg2://...
+python-dotenv
+
+opencv-python
+numpy
+ultralytics                 # YOLOv11 + built-in ByteTrack (tracker="bytetrack.yaml")
+
+bcrypt                      # password hashing (app/auth.py)
+pyjwt                       # JWT auth tokens (app/auth.py)
+reportlab                   # PDF report generation (app/services/report_generator.py)
+groq                        # AI Assistant text + vision (see GROQ_API_KEY in config.py)
+
+# Optional — only needed if DETECTOR_BACKEND=roboflow (see
+# ai/roboflow_detector.py). Not required for the default local YOLO pipeline.
+# inference-sdk

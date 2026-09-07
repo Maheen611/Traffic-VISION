@@ -1,0 +1,36 @@
+# Unified class taxonomy for the fine-tuned emergency-vehicle model.
+# This is what YOLO_WEIGHTS should point to once trained — it matches
+# the classes the master prompt asked for (car, bike, bus, truck,
+# ambulance, fire truck, police vehicle, auto rickshaw, bicycle,
+# pedestrian) plus the two "true emergency" classes stock COCO
+# weights don't have.
+#
+# Fill in `path`/`train`/`val` after running merge_datasets.py — it
+# writes a ready-to-use copy of this file into the merged dataset dir.
+
+path: ../datasets/merged_emergency_vehicles   # dataset root (relative to this file)
+train: images/train
+val: images/val
+test: images/test   # optional
+
+names:
+  0: car
+  1: bike            # motorcycle / scooter
+  2: bus
+  3: truck
+  4: auto_rickshaw    # common in Indian traffic (autorickshaw / tempo / three-wheeler)
+  5: bicycle
+  6: pedestrian
+  7: ambulance
+  8: fire_truck
+  9: police_vehicle
+
+# Notes:
+# - Classes 7-9 are the rare/minority classes in almost every public
+#   dataset (a handful of % of total instances). See
+#   class_balance_report.py before training — if they're under
+#   ~5% of instances, use oversampling and/or class-weighted loss,
+#   not just more epochs.
+# - Ultralytics YOLO uses this exact file format (`path`, `train`,
+#   `val`, `names`) — pass it straight to `yolo train data=data.yaml`
+#   or `model.train(data="data.yaml", ...)`.

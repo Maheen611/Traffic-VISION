@@ -1,0 +1,197 @@
+{
+  "version": "1.0",
+  "inputs": [
+    {
+      "type": "WorkflowImage",
+      "name": "image"
+    }
+  ],
+  "steps": [
+    {
+      "type": "roboflow_core/roboflow_object_detection_model@v3",
+      "name": "detect_vehicles",
+      "images": "$inputs.image",
+      "model_id": "rfdetr-small",
+      "confidence_mode": "custom",
+      "custom_confidence": 0.3,
+      "class_filter": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck"
+      ]
+    },
+    {
+      "type": "roboflow_core/trackers_bytetrack@v1",
+      "name": "track_vehicles",
+      "image": "$inputs.image",
+      "detections": "$steps.detect_vehicles.predictions",
+      "minimum_consecutive_frames": 2,
+      "lost_track_buffer": 40,
+      "track_activation_threshold": 0.3,
+      "high_conf_det_threshold": 0.3
+    },
+    {
+      "type": "roboflow_core/property_definition@v1",
+      "name": "vehicle_count",
+      "data": "$steps.track_vehicles.tracked_detections",
+      "operations": [
+        { "type": "SequenceLength" }
+      ]
+    },
+    {
+      "type": "roboflow_core/expression@v1",
+      "name": "density_level",
+      "data": { "count": "$steps.vehicle_count.output" },
+      "data_operations": {},
+      "switch": {
+        "type": "CasesDefinition",
+        "cases": [
+          {
+            "type": "CaseDefinition",
+            "condition": {
+              "type": "StatementGroup", "operator": "and",
+              "statements": [{
+                "type": "BinaryStatement",
+                "comparator": { "type": "(Number) >" },
+                "left_operand": { "type": "DynamicOperand", "operand_name": "count" },
+                "right_operand": { "type": "StaticOperand", "value": 30 }
+              }]
+            },
+            "result": { "type": "StaticCaseResult", "value": "HIGH" }
+          },
+          {
+            "type": "CaseDefinition",
+            "condition": {
+              "type": "StatementGroup", "operator": "and",
+              "statements": [{
+                "type": "BinaryStatement",
+                "comparator": { "type": "(Number) >" },
+                "left_operand": { "type": "DynamicOperand", "operand_name": "count" },
+                "right_operand": { "type": "StaticOperand", "value": 15 }
+              }]
+            },
+            "result": { "type": "StaticCaseResult", "value": "MEDIUM" }
+          }
+        ],
+        "default": { "type": "StaticCaseResult", "value": "LOW" }
+      }
+    },
+    {
+      "type": "roboflow_core/sam3@v3",
+      "name": "detect_ambulance",
+      "images": "$inputs.image",
+      "model_id": "sam3/sam3_final",
+      "class_names": ["ambulance"],
+      "confidence": 0.5,
+      "output_format": "rle"
+    },
+    {
+      "type": "roboflow_core/property_definition@v1",
+      "name": "ambulance_count",
+      "data": "$steps.detect_ambulance.predictions",
+      "operations": [{ "type": "SequenceLength" }]
+    },
+    {
+      "type": "roboflow_core/expression@v1",
+      "name": "priority_status",
+      "data": { "count": "$steps.ambulance_count.output" },
+      "data_operations": {},
+      "switch": {
+        "type": "CasesDefinition",
+        "cases": [{
+          "type": "CaseDefinition",
+          "condition": {
+            "type": "StatementGroup", "operator": "and",
+            "statements": [{
+              "type": "BinaryStatement",
+              "comparator": { "type": "(Number) >" },
+              "left_operand": { "type": "DynamicOperand", "operand_name": "count" },
+              "right_operand": { "type": "StaticOperand", "value": 0 }
+            }]
+          },
+          "result": { "type": "StaticCaseResult", "value": "AMBULANCE PRIORITY" }
+        }],
+        "default": { "type": "StaticCaseResult", "value": "NORMAL TRAFFIC" }
+      }
+    },
+    {
+      "type": "roboflow_core/mask_visualization@v1",
+      "name": "highlight_ambulance",
+      "image": "$inputs.image",
+      "predictions": "$steps.detect_ambulance.predictions",
+      "opacity": 0.55,
+      "custom_colors": ["#FF0000"],
+      "color_axis": "CLASS"
+    },
+    {
+      "type": "roboflow_core/bounding_box_visualization@v1",
+      "name": "draw_vehicle_boxes",
+      "image": "$steps.highlight_ambulance.image",
+      "predictions": "$steps.track_vehicles.tracked_detections",
+      "color_axis": "TRACK",
+      "thickness": 2
+    },
+    {
+      "type": "roboflow_core/label_visualization@v2",
+      "name": "draw_vehicle_labels",
+      "image": "$steps.draw_vehicle_boxes.image",
+      "predictions": "$steps.track_vehicles.tracked_detections",
+      "text": "Class",
+      "color_axis": "TRACK",
+      "text_size_mode": "Automatic"
+    },
+    {
+      "type": "roboflow_core/label_visualization@v2",
+      "name": "draw_ambulance_label",
+      "image": "$steps.draw_vehicle_labels.image",
+      "predictions": "$steps.detect_ambulance.predictions",
+      "text": "Class and Confidence",
+      "custom_colors": ["#FF0000"],
+      "color_axis": "CLASS",
+      "text_size_mode": "Automatic"
+    },
+    {
+      "type": "roboflow_core/text_display@v1",
+      "name": "show_density",
+      "image": "$steps.draw_ambulance_label.image",
+      "text": "Vehicles: {{ $parameters.count }} | Density: {{ $parameters.level }}",
+      "text_parameters": {
+        "count": "$steps.vehicle_count.output",
+        "level": "$steps.density_level.output"
+      },
+      "text_parameters_operations": {},
+      "position_mode": "relative",
+      "anchor": "top_left",
+      "offset_x": 10,
+      "offset_y": 10,
+      "background_color": "BLACK",
+      "background_opacity": 0.75,
+      "text_color": "WHITE"
+    },
+    {
+      "type": "roboflow_core/text_display@v1",
+      "name": "show_priority",
+      "image": "$steps.show_density.image",
+      "text": "Priority: {{ $parameters.status }}",
+      "text_parameters": { "status": "$steps.priority_status.output" },
+      "text_parameters_operations": {},
+      "position_mode": "relative",
+      "anchor": "top_right",
+      "offset_x": -10,
+      "offset_y": 10,
+      "background_color": "RED",
+      "background_opacity": 0.8,
+      "text_color": "WHITE"
+    }
+  ],
+  "outputs": [
+    { "type": "JsonField", "name": "output_image", "selector": "$steps.show_priority.image" },
+    { "type": "JsonField", "name": "tracked_vehicles", "selector": "$steps.track_vehicles.tracked_detections" },
+    { "type": "JsonField", "name": "vehicle_count", "selector": "$steps.vehicle_count.output" },
+    { "type": "JsonField", "name": "density_level", "selector": "$steps.density_level.output" },
+    { "type": "JsonField", "name": "ambulance_predictions", "selector": "$steps.detect_ambulance.predictions" },
+    { "type": "JsonField", "name": "ambulance_count", "selector": "$steps.ambulance_count.output" },
+    { "type": "JsonField", "name": "priority_status", "selector": "$steps.priority_status.output" }
+  ]
+}
